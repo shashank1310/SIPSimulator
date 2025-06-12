@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIP Simulator</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="style.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="header-left">
+                    <h1><i class="fas fa-chart-line"></i> SIP Simulator</h1>
+                    <p>Simulate and compare your SIP investments with benchmark indices</p>
+                </div>
+                <div class="header-right">
+                    <button id="theme-toggle" class="theme-toggle" title="Toggle Dark Mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-tab="simulator">
+                <i class="fas fa-calculator"></i> SIP Simulator
+            </button>
+            <button class="nav-tab" data-tab="risk-analysis">
+                <i class="fas fa-shield-alt"></i> Risk Analysis
+            </button>
+            <button class="nav-tab" data-tab="goal-planning">
+                <i class="fas fa-bullseye"></i> Goal Planning
+            </button>
+            <button class="nav-tab" data-tab="step-up-sip">
+                <i class="fas fa-chart-bar"></i> Step-up SIP
+            </button>
+            <button class="nav-tab" data-tab="fund-comparison">
+                <i class="fas fa-balance-scale"></i> Fund Comparison
+            </button>
+        </nav>
+
+        <main>
+            <!-- SIP Simulator Tab -->
+            <section id="simulator-tab" class="tab-content active">
+                <!-- Input Section -->
+                <section class="input-section card">
+                    <h2><i class="fas fa-cog"></i> Configure Your SIP</h2>
+                    
+                    <div class="date-inputs">
+                        <div class="input-group">
+                            <label for="start-date">Start Date</label>
+                            <input type="date" id="start-date" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="end-date">End Date</label>
+                            <input type="date" id="end-date" required>
+                        </div>
+                    </div>
+
+                    <div class="funds-section">
+                        <h3>Selected Mutual Funds</h3>
+                        <div id="selected-funds">
+                            <!-- Selected funds will appear here -->
+                        </div>
+                        
+                        <div class="add-fund-section">
+                            <div class="search-container">
+                                <input type="text" id="fund-search" placeholder="Search for mutual funds...">
+                                <button id="search-btn"><i class="fas fa-search"></i></button>
+                            </div>
+                            <div id="search-results" class="search-results"></div>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button id="simulate-btn" class="btn btn-primary">
+                            <i class="fas fa-calculator"></i> Simulate SIP
+                        </button>
+                        <button id="benchmark-btn" class="btn btn-secondary">
+                            <i class="fas fa-chart-bar"></i> Compare with Nifty 50
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Results Section -->
+                <section class="results-section" id="results-section" style="display: none;">
+                    <div class="card">
+                        <h2><i class="fas fa-chart-area"></i> Investment Performance</h2>
+                        <div class="chart-container">
+                            <canvas id="performance-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="summary-cards">
+                        <div class="card summary-card">
+                            <h3>Portfolio Summary</h3>
+                            <div id="portfolio-summary">
+                                <!-- Portfolio summary will be populated here -->
+                            </div>
+                        </div>
+                        
+                        <div class="card summary-card">
+                            <h3>Fund-wise Performance</h3>
+                            <div id="fund-performance">
+                                <!-- Fund performance will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" id="benchmark-comparison" style="display: none;">
+                        <h3>Benchmark Comparison</h3>
+                        <div id="benchmark-data">
+                            <!-- Benchmark comparison will be populated here -->
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <!-- Risk Analysis Tab -->
+            <section id="risk-analysis-tab" class="tab-content">
+                <div class="card">
+                    <h2><i class="fas fa-shield-alt"></i> Risk Analysis Dashboard</h2>
+                    <p class="tab-description">Comprehensive risk metrics for your portfolio including volatility, Sharpe ratio, and maximum drawdown analysis.</p>
+                    
+                    <div class="risk-controls">
+                        <button id="analyze-risk-btn" class="btn btn-primary">
+                            <i class="fas fa-chart-line"></i> Analyze Portfolio Risk
+                        </button>
+                    </div>
+                    
+                    <div id="risk-results" class="risk-results" style="display: none;">
+                        <!-- Risk analysis results will be populated here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Goal Planning Tab -->
+            <section id="goal-planning-tab" class="tab-content">
+                <div class="card">
+                    <h2><i class="fas fa-bullseye"></i> Goal-Based Investment Planning</h2>
+                    <p class="tab-description">Plan your investments for specific financial goals like retirement, education, or custom targets.</p>
+                    
+                    <div class="goal-form">
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label for="goal-type">Goal Type</label>
+                                <select id="goal-type">
+                                    <option value="retirement">Retirement Planning</option>
+                                    <option value="education">Child Education</option>
+                                    <option value="custom">Custom Goal</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="current-age">Current Age</label>
+                                <input type="number" id="current-age" value="30" min="18" max="65">
+                            </div>
+                        </div>
+
+                        <!-- Retirement specific fields -->
+                        <div id="retirement-fields" class="goal-specific-fields">
+                            <div class="form-row">
+                                <div class="input-group">
+                                    <label for="retirement-age">Retirement Age</label>
+                                    <input type="number" id="retirement-age" value="60" min="50" max="70">
+                                </div>
+                                <div class="input-group">
+                                    <label for="monthly-expenses">Current Monthly Expenses (₹)</label>
+                                    <input type="number" id="monthly-expenses" value="50000" step="5000">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Education specific fields -->
+                        <div id="education-fields" class="goal-specific-fields" style="display: none;">
+                            <div class="form-row">
+                                <div class="input-group">
+                                    <label for="child-age">Child's Current Age</label>
+                                    <input type="number" id="child-age" value="5" min="0" max="17">
+                                </div>
+                                <div class="input-group">
+                                    <label for="education-cost">Current Education Cost (₹)</label>
+                                    <input type="number" id="education-cost" value="2000000" step="100000">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Custom goal fields -->
+                        <div id="custom-fields" class="goal-specific-fields" style="display: none;">
+                            <div class="form-row">
+                                <div class="input-group">
+                                    <label for="target-amount">Target Amount (₹)</label>
+                                    <input type="number" id="target-amount" value="5000000" step="100000">
+                                </div>
+                                <div class="input-group">
+                                    <label for="time-horizon">Time Horizon (Years)</label>
+                                    <input type="number" id="time-horizon" value="10" min="1" max="40">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label for="expected-return">Expected Annual Return (%)</label>
+                                <input type="number" id="expected-return" value="12" min="6" max="20" step="0.5">
+                            </div>
+                            <div class="input-group">
+                                <label for="inflation-rate">Inflation Rate (%)</label>
+                                <input type="number" id="inflation-rate" value="6" min="3" max="10" step="0.5">
+                            </div>
+                        </div>
+
+                        <button id="calculate-goal-btn" class="btn btn-primary">
+                            <i class="fas fa-calculator"></i> Calculate SIP Requirement
+                        </button>
+                    </div>
+
+                    <div id="goal-results" class="goal-results" style="display: none;">
+                        <!-- Goal planning results will be populated here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step-up SIP Tab -->
+            <section id="step-up-sip-tab" class="tab-content">
+                <div class="card">
+                    <h2><i class="fas fa-chart-bar"></i> Step-up SIP Calculator</h2>
+                    <p class="tab-description">Simulate SIP with annual increases to beat inflation and accelerate wealth creation.</p>
+                    
+                    <div class="step-up-controls">
+                        <div class="input-group">
+                            <label for="step-up-percentage">Annual Step-up Percentage (%)</label>
+                            <input type="number" id="step-up-percentage" value="10" min="5" max="25" step="1">
+                        </div>
+                        <button id="simulate-step-up-btn" class="btn btn-primary">
+                            <i class="fas fa-chart-line"></i> Simulate Step-up SIP
+                        </button>
+                    </div>
+                    
+                    <div id="step-up-results" class="step-up-results" style="display: none;">
+                        <!-- Step-up SIP results will be populated here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Fund Comparison Tab -->
+            <section id="fund-comparison-tab" class="tab-content">
+                <div class="card">
+                    <h2><i class="fas fa-balance-scale"></i> Fund Comparison Tool</h2>
+                    <p class="tab-description">Compare multiple funds side-by-side with detailed metrics and performance analysis.</p>
+                    
+                    <div id="comparison-results" class="comparison-results">
+                        <p class="placeholder-text">Select funds from the SIP Simulator tab to enable comparison.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Loading Modal -->
+        <div id="loading-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="spinner"></div>
+                <p>Calculating your SIP returns...</p>
+            </div>
+        </div>
+
+        <!-- Error Modal -->
+        <div id="error-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span class="close" id="close-error">&times;</span>
+                <h3>Error</h3>
+                <p id="error-message"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load modular JavaScript files -->
+    <script src="js/core/SIPSimulator.js"></script>
+    <script src="js/modules/ThemeManager.js"></script>
+    <script src="js/modules/NavigationManager.js"></script>
+    <script src="js/modules/FundManager.js"></script>
+    <script src="js/modules/SimulationManager.js"></script>
+    <script src="js/modules/ChartManager.js"></script>
+    <script src="js/modules/AnalysisManager.js"></script>
+    
+    <!-- Initialize the application -->
+    <script>
+        // Initialize the SIP Simulator
+        const sipSimulator = new SIPSimulator();
+    </script>
+</body>
+</html> 

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backend Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        button { padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { background: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 5px; border: 1px solid #dee2e6; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>SIP Simulator Backend Test</h1>
+    
+    <div>
+        <button onclick="testBackend()">Test Backend Connection</button>
+        <button onclick="testSearch()">Test Search API</button>
+        <button onclick="testSimulate()">Test Simulate API</button>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        const apiBaseUrl = 'http://localhost:5000/api';
+        
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            results.appendChild(div);
+            console.log(message);
+        }
+
+        async function testBackend() {
+            try {
+                log('Testing backend connection...');
+                const response = await fetch('http://localhost:5000/');
+                const text = await response.text();
+                log(`✅ Backend connected: ${text}`, 'success');
+            } catch (error) {
+                log(`❌ Backend connection failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSearch() {
+            try {
+                log('Testing search API...');
+                const response = await fetch(`${apiBaseUrl}/search-funds?q=sbi`);
+                const data = await response.json();
+                log(`✅ Search API works: Found ${data.funds.length} funds`, 'success');
+            } catch (error) {
+                log(`❌ Search API failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSimulate() {
+            try {
+                log('Testing simulate API...');
+                const requestData = {
+                    funds: [{
+                        scheme_code: "120503",
+                        fund_name: "SBI Bluechip Fund",
+                        sip_amount: 10000
+                    }],
+                    start_date: "2023-01-01",
+                    end_date: "2024-01-01"
+                };
+
+                const response = await fetch(`${apiBaseUrl}/simulate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                if (result.success) {
+                    log(`✅ Simulate API works: Final value ₹${result.data.portfolio_summary.final_value}`, 'success');
+                } else {
+                    log(`❌ Simulate API failed: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Simulate API failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-test on page load
+        window.addEventListener('load', () => {
+            log('Page loaded. Running auto-tests...');
+            setTimeout(testBackend, 500);
+            setTimeout(testSearch, 1000);
+            setTimeout(testSimulate, 1500);
+        });
+    </script>
+</body>
+</html> 
