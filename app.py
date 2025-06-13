@@ -183,44 +183,64 @@ def simulate_sip():
             return jsonify({'error': 'No data provided'}), 400
         
         funds = data.get('funds', [])
-        start_date = data.get('startDate', '2020-01-01')
-        end_date = data.get('endDate', '2024-01-01')
+        start_date = data.get('start_date', '2020-01-01')  # Frontend sends start_date
+        end_date = data.get('end_date', '2024-01-01')      # Frontend sends end_date
         
-        app.logger.info(f"SIP simulation request: {len(funds)} funds")
+        app.logger.info(f"SIP simulation request: {len(funds)} funds, {start_date} to {end_date}")
         
-        # Mock calculation
-        total_sip = sum(fund.get('sipAmount', 5000) for fund in funds)
+        if not funds:
+            return jsonify({'success': False, 'error': 'No funds provided'}), 400
+        
+        # Mock calculation - using sip_amount field from frontend
+        total_sip = sum(fund.get('sip_amount', 5000) for fund in funds)
         months = 48  # 4 years
         total_investment = total_sip * months
         expected_return = 12.5  # 12.5% annual return
         final_value = total_investment * (1 + expected_return/100) ** 4
         
-        result = {
-            'status': 'success',
-            'simulation_summary': {
-                'total_investment': round(total_investment, 2),
-                'final_value': round(final_value, 2),
-                'total_gains': round(final_value - total_investment, 2),
-                'cagr': expected_return,
-                'absolute_return': round(((final_value - total_investment) / total_investment) * 100, 2)
-            },
-            'fund_performance': [
-                {
-                    'fund_name': fund.get('fund_name', 'Unknown Fund'),
-                    'sip_amount': fund.get('sipAmount', 5000),
-                    'investment': fund.get('sipAmount', 5000) * months,
-                    'final_value': fund.get('sipAmount', 5000) * months * 1.5,
-                    'returns': 12.5
-                }
-                for fund in funds
-            ]
+        # Create fund performance data matching frontend expectations
+        fund_performance = []
+        for fund in funds:
+            sip_amount = fund.get('sip_amount', 5000)
+            investment = sip_amount * months
+            current_value = investment * 1.5  # Mock 50% gain
+            return_pct = ((current_value - investment) / investment) * 100
+            
+            fund_performance.append({
+                'fund_name': fund.get('fund_name', 'Unknown Fund'),
+                'scheme_code': fund.get('scheme_code', ''),
+                'sip_amount': sip_amount,
+                'invested': investment,
+                'current_value': current_value,
+                'return_pct': return_pct,
+                'cagr': 12.5,
+                'xirr': 13.2
+            })
+        
+        # Portfolio summary matching frontend expectations
+        portfolio_summary = {
+            'total_invested': round(total_investment, 2),
+            'final_value': round(final_value, 2),
+            'total_gains': round(final_value - total_investment, 2),
+            'cagr': expected_return,
+            'absolute_return': round(((final_value - total_investment) / total_investment) * 100, 2),
+            'xirr': 13.5
         }
         
+        result = {
+            'success': True,
+            'data': {
+                'portfolio_summary': portfolio_summary,
+                'funds': fund_performance
+            }
+        }
+        
+        app.logger.info(f"Simulation completed successfully for {len(funds)} funds")
         return jsonify(result)
         
     except Exception as e:
         app.logger.error(f"Error in simulate_sip: {str(e)}")
-        return jsonify({'error': 'Simulation failed'}), 500
+        return jsonify({'success': False, 'error': 'Simulation failed'}), 500
 
 @app.route('/api/benchmark', methods=['POST'])
 def benchmark_comparison():
