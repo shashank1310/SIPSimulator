@@ -206,6 +206,36 @@ def simulate_sip():
             current_value = investment * 1.5  # Mock 50% gain
             return_pct = ((current_value - investment) / investment) * 100
             
+            # Generate monthly data for performance chart
+            import datetime
+            from dateutil.relativedelta import relativedelta
+            
+            start = datetime.datetime.strptime(start_date, '%Y-%m-%d')
+            end = datetime.datetime.strptime(end_date, '%Y-%m-%d')
+            
+            monthly_data = []
+            current_date = start
+            cumulative_investment = 0
+            cumulative_value = 0
+            month_count = 0
+            
+            while current_date <= end:
+                month_count += 1
+                cumulative_investment += sip_amount
+                
+                # Apply mock monthly growth (12.5% annual = ~0.99% monthly)
+                monthly_growth = 1 + (12.5 / 100 / 12)
+                cumulative_value = (cumulative_value + sip_amount) * monthly_growth
+                
+                monthly_data.append({
+                    'date': current_date.strftime('%Y-%m-%d'),
+                    'invested': round(cumulative_investment, 2),
+                    'current_value': round(cumulative_value, 2),
+                    'month': month_count
+                })
+                
+                current_date += relativedelta(months=1)
+            
             fund_performance.append({
                 'fund_name': fund.get('fund_name', 'Unknown Fund'),
                 'scheme_code': fund.get('scheme_code', ''),
@@ -214,7 +244,8 @@ def simulate_sip():
                 'current_value': current_value,
                 'return_pct': return_pct,
                 'cagr': 12.5,
-                'xirr': 13.2
+                'xirr': 13.2,
+                'monthly_data': monthly_data  # This is what the chart needs
             })
         
         # Portfolio summary matching frontend expectations
