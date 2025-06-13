@@ -31,19 +31,16 @@
         <!-- Navigation Tabs -->
         <nav class="nav-tabs">
             <button class="nav-tab active" data-tab="simulator">
-                <i class="fas fa-calculator"></i> SIP Simulator
+                <i class="fas fa-calculator"></i> SIP Simulator & Analysis
             </button>
-            <button class="nav-tab" data-tab="risk-analysis">
-                <i class="fas fa-shield-alt"></i> Risk Analysis
+            <button class="nav-tab" data-tab="portfolio-analyzer">
+                <i class="fas fa-chart-pie"></i> Portfolio Analyzer
             </button>
             <button class="nav-tab" data-tab="goal-planning">
                 <i class="fas fa-bullseye"></i> Goal Planning
             </button>
             <button class="nav-tab" data-tab="step-up-sip">
                 <i class="fas fa-chart-bar"></i> Step-up SIP
-            </button>
-            <button class="nav-tab" data-tab="fund-comparison">
-                <i class="fas fa-balance-scale"></i> Fund Comparison
             </button>
         </nav>
 
@@ -73,10 +70,24 @@
                         
                         <div class="add-fund-section">
                             <div class="search-container">
-                                <input type="text" id="fund-search" placeholder="Search for mutual funds...">
+                                <input type="text" id="fund-search" placeholder="Type fund name (e.g., HDFC, SBI, Axis)..." autocomplete="off">
                                 <button id="search-btn"><i class="fas fa-search"></i></button>
+                                <div class="search-loading" id="search-loading" style="display: none;">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                </div>
                             </div>
                             <div id="search-results" class="search-results"></div>
+                            <div class="search-suggestions">
+                                <p><strong>Popular searches:</strong></p>
+                                <div class="suggestion-chips">
+                                    <span class="suggestion-chip" data-query="HDFC">HDFC</span>
+                                    <span class="suggestion-chip" data-query="SBI">SBI</span>
+                                    <span class="suggestion-chip" data-query="Axis">Axis</span>
+                                    <span class="suggestion-chip" data-query="ICICI">ICICI</span>
+                                    <span class="suggestion-chip" data-query="Kotak">Kotak</span>
+                                    <span class="suggestion-chip" data-query="Nippon">Nippon</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -115,6 +126,48 @@
                         </div>
                     </div>
 
+                    <!-- Integrated Analysis Section -->
+                    <div class="analysis-section">
+                        <div class="analysis-tabs">
+                            <button class="analysis-tab active" data-analysis="risk">
+                                <i class="fas fa-shield-alt"></i> Risk Analysis
+                            </button>
+                            <button class="analysis-tab" data-analysis="comparison">
+                                <i class="fas fa-balance-scale"></i> Fund Comparison
+                            </button>
+                        </div>
+
+                        <!-- Risk Analysis -->
+                        <div id="risk-analysis-content" class="analysis-content active">
+                            <div class="card">
+                                <div class="analysis-header">
+                                    <h3><i class="fas fa-shield-alt"></i> Portfolio Risk Analysis</h3>
+                                    <button id="analyze-risk-btn" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-chart-line"></i> Analyze Risk
+                                    </button>
+                                </div>
+                                <div id="risk-results" class="risk-results" style="display: none;">
+                                    <!-- Risk analysis results will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fund Comparison -->
+                        <div id="comparison-content" class="analysis-content">
+                            <div class="card">
+                                <div class="analysis-header">
+                                    <h3><i class="fas fa-balance-scale"></i> Fund Comparison</h3>
+                                    <button id="compare-funds-btn" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-chart-bar"></i> Compare Funds
+                                    </button>
+                                </div>
+                                <div id="comparison-results">
+                                    <!-- Fund comparison results will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card" id="benchmark-comparison" style="display: none;">
                         <h3>Benchmark Comparison</h3>
                         <div id="benchmark-data">
@@ -124,20 +177,52 @@
                 </section>
             </section>
 
-            <!-- Risk Analysis Tab -->
-            <section id="risk-analysis-tab" class="tab-content">
+            <!-- Portfolio Analyzer Tab -->
+            <section id="portfolio-analyzer-tab" class="tab-content">
                 <div class="card">
-                    <h2><i class="fas fa-shield-alt"></i> Risk Analysis Dashboard</h2>
-                    <p class="tab-description">Comprehensive risk metrics for your portfolio including volatility, Sharpe ratio, and maximum drawdown analysis.</p>
+                    <h2><i class="fas fa-chart-pie"></i> Portfolio Analyzer</h2>
+                    <p class="tab-description">Analyze your existing portfolio by selecting individual stocks/funds you currently hold.</p>
                     
-                    <div class="risk-controls">
-                        <button id="analyze-risk-btn" class="btn btn-primary">
-                            <i class="fas fa-chart-line"></i> Analyze Portfolio Risk
-                        </button>
+                    <div class="portfolio-input-section">
+                        <h3>Add Your Holdings</h3>
+                        <div class="holding-input-form">
+                            <div class="form-row">
+                                <div class="input-group">
+                                    <label for="holding-search">Search Stock/Fund</label>
+                                    <input type="text" id="holding-search" placeholder="Search for stocks or mutual funds..." autocomplete="off">
+                                </div>
+                                <div class="input-group">
+                                    <label for="holding-quantity">Quantity/Units</label>
+                                    <input type="number" id="holding-quantity" placeholder="Enter quantity" min="0" step="0.01">
+                                </div>
+                                <div class="input-group">
+                                    <label for="holding-price">Avg. Purchase Price (₹)</label>
+                                    <input type="number" id="holding-price" placeholder="Enter price" min="0" step="0.01">
+                                </div>
+                                <div class="input-group">
+                                    <button id="add-holding-btn" class="btn btn-primary">
+                                        <i class="fas fa-plus"></i> Add
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="portfolio-holdings">
+                            <!-- Portfolio holdings will appear here -->
+                        </div>
+                        
+                        <div class="portfolio-actions">
+                            <button id="analyze-portfolio-btn" class="btn btn-primary">
+                                <i class="fas fa-chart-line"></i> Analyze Portfolio
+                            </button>
+                            <button id="portfolio-risk-btn" class="btn btn-secondary">
+                                <i class="fas fa-shield-alt"></i> Risk Analysis
+                            </button>
+                        </div>
                     </div>
                     
-                    <div id="risk-results" class="risk-results" style="display: none;">
-                        <!-- Risk analysis results will be populated here -->
+                    <div id="portfolio-analysis-results" class="portfolio-results" style="display: none;">
+                        <!-- Portfolio analysis results will be populated here -->
                     </div>
                 </div>
             </section>
@@ -246,18 +331,6 @@
                     
                     <div id="step-up-results" class="step-up-results" style="display: none;">
                         <!-- Step-up SIP results will be populated here -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- Fund Comparison Tab -->
-            <section id="fund-comparison-tab" class="tab-content">
-                <div class="card">
-                    <h2><i class="fas fa-balance-scale"></i> Fund Comparison Tool</h2>
-                    <p class="tab-description">Compare multiple funds side-by-side with detailed metrics and performance analysis.</p>
-                    
-                    <div id="comparison-results" class="comparison-results">
-                        <p class="placeholder-text">Select funds from the SIP Simulator tab to enable comparison.</p>
                     </div>
                 </div>
             </section>

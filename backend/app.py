@@ -14,9 +14,13 @@ import functools
 import hashlib
 import numpy as np
 import math
+from fund_data_sources import create_fund_data_provider
 
 app = Flask(__name__)
 CORS(app)
+
+# Initialize the fund data provider
+FUND_DATA_PROVIDER = create_fund_data_provider("hybrid")
 
 # Comprehensive static fund list - major Indian mutual funds
 COMPREHENSIVE_FUND_LIST = [
@@ -243,58 +247,52 @@ def generate_optimized_mock_nav_data(scheme_code, start_date, end_date):
 
 # Optimized NAV fetcher with caching and better error handling
 def fetch_nav_optimized(scheme_code, start_date=None, end_date=None):
-    """Optimized NAV fetcher with caching and date filtering"""
-    # Check cache first
-    if start_date and end_date:
+    """Fetch NAV data using the new fund data provider with fallback to mock data"""
+    try:
+        # Check cache first
         cached_data = get_cached_nav_data(scheme_code, start_date, end_date)
         if cached_data is not None:
+            print(f"Using cached NAV data for {scheme_code}")
             return cached_data
-    
-    url = f"https://api.mfapi.in/mf/{scheme_code}"
-    try:
-        # Reduced timeout for better responsiveness
-        r = requests.get(url, timeout=5)
-        r.raise_for_status()
-        data = r.json()['data']
         
-        # Filter data to required date range for better performance
-        if start_date and end_date:
-            # Convert to datetime for filtering
-            start_dt = pd.to_datetime(start_date) if isinstance(start_date, str) else start_date
-            end_dt = pd.to_datetime(end_date) if isinstance(end_date, str) else end_date
-            
-            # Filter data by date range
-            filtered_data = []
-            for item in data:
-                item_date = pd.to_datetime(item['date'], format="%d-%m-%Y")
-                if start_dt <= item_date <= end_dt:
-                    filtered_data.append(item)
-            
-            data = filtered_data if filtered_data else data[:100]  # Fallback to recent 100 records
-        else:
-            data = data[:200]  # Limit to recent 200 records for better performance
+        print(f"Fetching NAV data for scheme {scheme_code} from {start_date} to {end_date}")
         
-        df = pd.DataFrame(data)
-        if not df.empty:
-            df['date'] = pd.to_datetime(df['date'], format="%d-%m-%Y")
-            df['nav'] = df['nav'].astype(float)
-            df = df.sort_values('date')
+        # Try to get real data from fund data provider
+        nav_data = FUND_DATA_PROVIDER.get_nav_data(scheme_code, start_date, end_date)
+        
+        if not nav_data.empty and len(nav_data) > 10:  # Ensure we have sufficient data
+            print(f"Successfully fetched {len(nav_data)} NAV records from real data source")
             
-            # Cache the result
-            if start_date and end_date:
-                cache_nav_data(scheme_code, start_date, end_date, df)
-            
-            return df
+            # Cache the real data
+            cache_nav_data(scheme_code, start_date, end_date, nav_data)
+            return nav_data
         else:
-            raise ValueError("No data received from API")
+            print(f"Insufficient real data ({len(nav_data)} records), generating optimized mock data")
             
+        # Fallback to optimized mock data generation
+        if start_date is None:
+            start_date = datetime.now() - timedelta(days=5*365)  # 5 years default
+        if end_date is None:
+            end_date = datetime.now()
+            
+        mock_data = generate_optimized_mock_nav_data(scheme_code, start_date, end_date)
+        
+        # Cache the mock data (shorter duration)
+        cache_nav_data(scheme_code, start_date, end_date, mock_data)
+        
+        print(f"Generated {len(mock_data)} mock NAV records for {scheme_code}")
+        return mock_data
+        
     except Exception as e:
-        print(f"Error fetching NAV for {scheme_code}: {e}")
-        print(f"Using optimized fallback NAV data for scheme {scheme_code}")
-        if start_date and end_date:
-            return generate_optimized_mock_nav_data(scheme_code, start_date, end_date)
-        else:
-            return generate_mock_nav_data(scheme_code)
+        print(f"Error in fetch_nav_optimized for {scheme_code}: {e}")
+        
+        # Final fallback - minimal mock data
+        if start_date is None:
+            start_date = datetime.now() - timedelta(days=365)
+        if end_date is None:
+            end_date = datetime.now()
+            
+        return generate_optimized_mock_nav_data(scheme_code, start_date, end_date)
 
 def get_comprehensive_fund_list():
     """Get comprehensive fund list from static data"""
@@ -706,99 +704,46 @@ def process_portfolio_cumulative_optimized(funds, start_date, end_date):
 
 @app.route('/api/search-funds', methods=['GET'])
 def search_funds():
-    """Search for mutual funds with comprehensive data"""
-    query = request.args.get('q', '').lower().strip()
-    
-    # Get comprehensive fund list from static data + optional online augmentation
-    all_funds = get_comprehensive_fund_list()
-    
-    if not query:
-        # Return top 50 popular funds when no query
-        popular_scheme_codes = [
-            "122639", "127042", "113177", "147625", "120503", "120465", 
-            "118825", "101206", "147614", "120716", "120444", "120305",
-            "119597", "119551", "119550", "118989", "125494", "147654",
-            "112090", "143048", "120444", "113177", "120305", "118989"
-        ]
+    """Search for mutual funds with improved performance and real-time data"""
+    try:
+        query = request.args.get('q', '').strip()
         
-        results = []
-        seen_codes = set()
-        
-        # First, add popular funds
-        for fund in all_funds:
-            if fund['scheme_code'] in popular_scheme_codes and fund['scheme_code'] not in seen_codes:
-                results.append(fund)
-                seen_codes.add(fund['scheme_code'])
-                if len(results) >= 30:
-                    break
-        
-        # Then add more funds to reach 50
-        for fund in all_funds:
-            if fund['scheme_code'] not in seen_codes:
-                results.append(fund)
-                seen_codes.add(fund['scheme_code'])
-                if len(results) >= 50:
-                    break
-        
-        return jsonify({"funds": results})
-    
-    # Search functionality with improved scoring
-    results = []
-    query_words = query.split()
-    
-    for fund in all_funds:
-        fund_name_lower = fund['fund_name'].lower()
-        
-        # Calculate relevance score
-        score = 0
-        
-        # Exact phrase match gets highest priority
-        if query in fund_name_lower:
-            score = 100
-        # Fund name starts with query
-        elif fund_name_lower.startswith(query):
-            score = 90
-        # All words present gets high priority  
-        elif all(word in fund_name_lower for word in query_words):
-            score = 80
-        # Most words present
-        elif len([word for word in query_words if word in fund_name_lower]) >= len(query_words) * 0.7:
-            score = 50
-        # Any word present gets low priority
-        elif any(word in fund_name_lower for word in query_words):
-            score = 20
-        
-        # Boost score for popular fund houses
-        popular_houses = ['hdfc', 'icici', 'sbi', 'axis', 'parag parikh', 'motilal oswal', 'nippon', 'kotak']
-        if any(house in fund_name_lower for house in popular_houses):
-            score += 10
-        
-        # Boost score for direct plans
-        if 'direct' in fund_name_lower:
-            score += 5
-            
-        if score > 0:
-            results.append({**fund, 'score': score})
-    
-    # Sort by score (descending) and limit results
-    results.sort(key=lambda x: x['score'], reverse=True)
-    
-    # Remove score from results and limit to 100
-    final_results = []
-    seen_codes = set()
-    
-    for result in results:
-        if result['scheme_code'] not in seen_codes:
-            final_results.append({
-                'scheme_code': result['scheme_code'],
-                'fund_name': result['fund_name']
+        if not query:
+            return jsonify({
+                'success': True,
+                'funds': [],
+                'message': 'Please enter a search term'
             })
-            seen_codes.add(result['scheme_code'])
-            
-        if len(final_results) >= 100:
-            break
-    
-    return jsonify({"funds": final_results})
+        
+        if len(query) < 2:
+            return jsonify({
+                'success': True,
+                'funds': [],
+                'message': 'Please enter at least 2 characters'
+            })
+        
+        # Use the new fund data provider for search
+        start_time = time.time()
+        funds = FUND_DATA_PROVIDER.search_funds(query, limit=50)
+        search_time = time.time() - start_time
+        
+        print(f"Search for '{query}' completed in {search_time:.3f}s, found {len(funds)} funds")
+        
+        return jsonify({
+            'success': True,
+            'funds': funds,
+            'search_time': round(search_time, 3),
+            'total_results': len(funds),
+            'message': f'Found {len(funds)} funds matching "{query}"'
+        })
+        
+    except Exception as e:
+        print(f"Error in search_funds: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Search failed: {str(e)}',
+            'funds': []
+        }), 500
 
 @app.route('/api/simulate', methods=['POST'])
 def simulate_sip():

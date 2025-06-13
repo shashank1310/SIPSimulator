@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio vs Nifty 50 Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-result {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .loading { opacity: 0.6; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <h1>Portfolio vs Nifty 50 Comparison Test</h1>
+    
+    <div class="test-container">
+        <h2>API Connectivity Tests</h2>
+        <button onclick="testHealthEndpoint()">Test Health Endpoint</button>
+        <button onclick="testSearchFunds()">Test Search Funds</button>
+        <button onclick="testCumulativePerformance()">Test Cumulative Performance</button>
+        <div id="api-results"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Frontend Integration Test</h2>
+        <p>Open the main application at: <a href="http://localhost:5000" target="_blank">http://localhost:5000</a></p>
+        <div class="info">
+            <strong>Test Steps:</strong>
+            <ol>
+                <li>Search and select at least one mutual fund</li>
+                <li>Set start date (e.g., 2020-01-01) and end date (e.g., 2024-12-31)</li>
+                <li>Click "Simulate SIP" to generate charts</li>
+                <li>Click "Portfolio vs Nifty 50" toggle button</li>
+                <li>Verify the comparison chart loads with both portfolio and Nifty 50 data</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>Expected Features</h2>
+        <div class="info">
+            <strong>Portfolio vs Nifty 50 Comparison should include:</strong>
+            <ul>
+                <li>✓ Interactive chart with portfolio performance line</li>
+                <li>✓ Nifty 50 benchmark line for comparison</li>
+                <li>✓ Total invested amount line (dashed)</li>
+                <li>✓ Zoom and pan controls</li>
+                <li>✓ Tooltips showing values and returns</li>
+                <li>✓ Performance summary below the chart</li>
+                <li>✓ Smooth animations and loading states</li>
+                <li>✓ Error handling for invalid inputs</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        
+        function showResult(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = message;
+            container.appendChild(div);
+        }
+        
+        function clearResults(containerId) {
+            document.getElementById(containerId).innerHTML = '';
+        }
+        
+        async function testHealthEndpoint() {
+            clearResults('api-results');
+            try {
+                const response = await fetch(`${API_BASE}/../health`);
+                const data = await response.json();
+                if (data.status === 'healthy') {
+                    showResult('api-results', '✓ Health endpoint working correctly', 'success');
+                } else {
+                    showResult('api-results', '✗ Health endpoint returned unexpected status', 'error');
+                }
+            } catch (error) {
+                showResult('api-results', `✗ Health endpoint failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testSearchFunds() {
+            try {
+                const response = await fetch(`${API_BASE}/search-funds`);
+                const data = await response.json();
+                if (data.funds && Array.isArray(data.funds)) {
+                    showResult('api-results', `✓ Search funds working - Found ${data.funds.length} funds`, 'success');
+                } else {
+                    showResult('api-results', '✗ Search funds returned unexpected format', 'error');
+                }
+            } catch (error) {
+                showResult('api-results', `✗ Search funds failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testCumulativePerformance() {
+            try {
+                const testData = {
+                    funds: [
+                        {
+                            fund_name: "Test Fund",
+                            scheme_code: "123456",
+                            sip_amount: 5000
+                        }
+                    ],
+                    start_date: "2020-01-01",
+                    end_date: "2024-12-31"
+                };
+                
+                const response = await fetch(`${API_BASE}/cumulative-performance`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                const data = await response.json();
+                if (data.success && data.data) {
+                    const portfolioPoints = data.data.portfolio ? data.data.portfolio.length : 0;
+                    const niftyPoints = data.data.nifty50 ? data.data.nifty50.length : 0;
+                    showResult('api-results', 
+                        `✓ Cumulative performance working - Portfolio: ${portfolioPoints} points, Nifty 50: ${niftyPoints} points`, 
+                        'success');
+                } else {
+                    showResult('api-results', `✗ Cumulative performance failed: ${data.error || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showResult('api-results', `✗ Cumulative performance failed: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-run health check on page load
+        window.onload = () => {
+            testHealthEndpoint();
+        };
+    </script>
+</body>
+</html> 

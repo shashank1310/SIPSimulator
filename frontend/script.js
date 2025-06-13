@@ -17,8 +17,31 @@ class SIPSimulator {
     initializeEventListeners() {
         // Search functionality with improved debouncing
         document.getElementById('fund-search').addEventListener('input', 
-            this.debounce(this.searchFunds.bind(this), 300)); // Reduced delay
+            this.debounce(this.searchFunds.bind(this), 200)); // Faster response
         document.getElementById('search-btn').addEventListener('click', this.searchFunds.bind(this));
+
+        // Suggestion chips
+        document.querySelectorAll('.suggestion-chip').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                const query = e.target.getAttribute('data-query');
+                document.getElementById('fund-search').value = query;
+                this.searchFunds();
+            });
+        });
+
+        // Analysis tabs
+        document.querySelectorAll('.analysis-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                const analysisType = e.target.getAttribute('data-analysis');
+                this.switchAnalysisTab(analysisType);
+            });
+        });
+
+        // Portfolio analyzer
+        document.getElementById('add-holding-btn')?.addEventListener('click', this.addHolding.bind(this));
+        document.getElementById('analyze-portfolio-btn')?.addEventListener('click', this.analyzePortfolio.bind(this));
+        document.getElementById('portfolio-risk-btn')?.addEventListener('click', this.analyzePortfolioRisk.bind(this));
+        document.getElementById('compare-funds-btn')?.addEventListener('click', this.compareFunds.bind(this));
 
         // Simulation buttons with loading state
         document.getElementById('simulate-btn').addEventListener('click', () => {
@@ -703,20 +726,34 @@ class SIPSimulator {
     async searchFunds() {
         const query = document.getElementById('fund-search').value.trim();
         const resultsContainer = document.getElementById('search-results');
+        const loadingIndicator = document.getElementById('search-loading');
 
         if (query.length < 2) {
             resultsContainer.style.display = 'none';
             return;
         }
 
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/search-funds?q=${encodeURIComponent(query)}`);
-            const data = await response.json();
+        // Show loading
+        loadingIndicator.style.display = 'block';
+        resultsContainer.innerHTML = '';
 
-            this.displaySearchResults(data.funds);
+        try {
+            console.log('Searching for:', query);
+            const response = await fetch(`${this.apiBaseUrl}/search-funds?q=${encodeURIComponent(query)}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            console.log('Search response:', data);
+
+            this.displaySearchResults(data.funds || []);
         } catch (error) {
-            console.error('Error searching funds:', error);
-            this.showError('Failed to search funds. Please try again.');
+            console.error('Search error:', error);
+            this.displaySearchError(error.message);
+        } finally {
+            loadingIndicator.style.display = 'none';
         }
     }
 
@@ -724,22 +761,38 @@ class SIPSimulator {
         const resultsContainer = document.getElementById('search-results');
         resultsContainer.innerHTML = '';
 
-        if (funds.length === 0) {
-            resultsContainer.innerHTML = '<div class="search-result-item">No funds found</div>';
+        if (!funds || funds.length === 0) {
+            resultsContainer.innerHTML = '<div class="search-no-results">No funds found. Try different keywords like "HDFC", "SBI", or "Large Cap".</div>';
         } else {
-            funds.forEach(fund => {
+            funds.slice(0, 10).forEach(fund => { // Limit to 10 results for performance
                 const resultItem = document.createElement('div');
                 resultItem.className = 'search-result-item';
                 resultItem.innerHTML = `
-                    <strong>${fund.fund_name}</strong>
-                    <br>
-                    <small>Code: ${fund.scheme_code}</small>
+                    <div class="search-result-main">
+                        <strong>${fund.fund_name}</strong>
+                        <small>Code: ${fund.scheme_code}</small>
+                    </div>
+                    <div class="search-result-meta">
+                        <div>Click to add</div>
+                    </div>
                 `;
                 resultItem.addEventListener('click', () => this.addFund(fund));
                 resultsContainer.appendChild(resultItem);
             });
         }
 
+        resultsContainer.style.display = 'block';
+    }
+
+    displaySearchError(errorMessage) {
+        const resultsContainer = document.getElementById('search-results');
+        resultsContainer.innerHTML = `
+            <div class="search-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                Search failed: ${errorMessage}
+                <br><small>Please check your connection and try again.</small>
+            </div>
+        `;
         resultsContainer.style.display = 'block';
     }
 
@@ -912,13 +965,37 @@ class SIPSimulator {
 
     async fetchAndDisplayCumulativeChart() {
         try {
+            // Validate that funds are selected
+            if (!this.selectedFunds || this.selectedFunds.length === 0) {
+                this.showError('Please select at least one fund to compare with Nifty 50.');
+                return;
+            }
+
+            // Validate date inputs
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            
+            if (!startDate || !endDate) {
+                this.showError('Please select both start and end dates.');
+                return;
+            }
+
+            if (new Date(startDate) >= new Date(endDate)) {
+                this.showError('Start date must be before end date.');
+                return;
+            }
+
             const requestData = {
                 funds: this.selectedFunds,
-                start_date: document.getElementById('start-date').value,
-                end_date: document.getElementById('end-date').value
+                start_date: startDate,
+                end_date: endDate
             };
 
-            console.log('Fetching cumulative performance data...');
+            console.log('Fetching cumulative performance data...', requestData);
+            
+            // Show loading state
+            this.showChartLoading();
+            
             const response = await fetch(`${this.apiBaseUrl}/cumulative-performance`, {
                 method: 'POST',
                 headers: {
@@ -934,15 +1011,40 @@ class SIPSimulator {
             const result = await response.json();
             console.log('Cumulative performance result:', result);
 
-            if (result.success) {
+            if (result.success && result.data) {
+                // Validate data structure
+                if (!result.data.portfolio || !Array.isArray(result.data.portfolio) || result.data.portfolio.length === 0) {
+                    throw new Error('Invalid portfolio data received from server');
+                }
+                
+                if (!result.data.nifty50 || !Array.isArray(result.data.nifty50) || result.data.nifty50.length === 0) {
+                    console.warn('No Nifty 50 data available, showing portfolio data only');
+                }
+
+                // Store data for future use
+                this.cumulativeData = result.data;
+                
+                // Create the chart
                 this.createCumulativePerformanceChart(result.data);
+                
+                // Show success message
+                this.showSuccessMessage('Portfolio vs Nifty 50 comparison loaded successfully!');
             } else {
                 console.error('Failed to fetch cumulative performance:', result.error);
-                this.showError('Could not load cumulative performance chart.');
+                this.showError(result.error || 'Could not load cumulative performance chart.');
             }
         } catch (error) {
             console.error('Error fetching cumulative performance:', error);
-            this.showError('Failed to load cumulative performance chart. Please try again.');
+            this.hideChartLoading();
+            
+            // Provide specific error messages
+            if (error.message.includes('fetch')) {
+                this.showError('Network error: Unable to connect to server. Please check your connection and try again.');
+            } else if (error.message.includes('HTTP error')) {
+                this.showError('Server error: Please try again later or contact support.');
+            } else {
+                this.showError(`Failed to load Portfolio vs Nifty 50 comparison: ${error.message}`);
+            }
         }
     }
 
@@ -1005,62 +1107,94 @@ class SIPSimulator {
 
         this.hideChartLoading();
 
+        // Validate input data
+        if (!data) {
+            this.showError('No data available for chart creation');
+            return;
+        }
+
         // Prepare datasets for cumulative portfolio vs Nifty 50
         const datasets = [];
+        let hasValidData = false;
 
         // Portfolio data
-        if (data.portfolio && data.portfolio.length > 0) {
-            datasets.push({
-                label: `Your Portfolio (${data.metadata.fund_count} funds)`,
-                data: data.portfolio.map(item => ({
-                    x: item.date,
-                    y: item.current_value
-                })),
-                borderColor: '#667eea',
-                backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                fill: false,
-                tension: 0.3,
-                borderWidth: 3,
-                pointRadius: 2,
-                pointHoverRadius: 6
-            });
+        if (data.portfolio && Array.isArray(data.portfolio) && data.portfolio.length > 0) {
+            // Validate portfolio data structure
+            const validPortfolioData = data.portfolio.filter(item => 
+                item && item.date && typeof item.current_value === 'number' && typeof item.invested === 'number'
+            );
 
-            // Add invested line for portfolio
-            datasets.push({
-                label: 'Total Invested',
-                data: data.portfolio.map(item => ({
-                    x: item.date,
-                    y: item.invested
-                })),
-                borderColor: '#a0aec0',
-                backgroundColor: 'rgba(160, 174, 192, 0.1)',
-                borderDash: [5, 5],
-                fill: false,
-                tension: 0.3,
-                borderWidth: 2,
-                pointRadius: 1,
-                pointHoverRadius: 4
-            });
+            if (validPortfolioData.length > 0) {
+                hasValidData = true;
+                
+                datasets.push({
+                    label: `Your Portfolio (${data.metadata?.fund_count || this.selectedFunds.length} funds)`,
+                    data: validPortfolioData.map(item => ({
+                        x: item.date,
+                        y: item.current_value
+                    })),
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    borderWidth: 3,
+                    pointRadius: 2,
+                    pointHoverRadius: 6
+                });
+
+                // Add invested line for portfolio
+                datasets.push({
+                    label: 'Total Invested',
+                    data: validPortfolioData.map(item => ({
+                        x: item.date,
+                        y: item.invested
+                    })),
+                    borderColor: '#a0aec0',
+                    backgroundColor: 'rgba(160, 174, 192, 0.1)',
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.3,
+                    borderWidth: 2,
+                    pointRadius: 1,
+                    pointHoverRadius: 4
+                });
+            }
         }
 
         // Nifty 50 data
-        if (data.nifty50 && data.nifty50.length > 0) {
-            datasets.push({
-                label: 'Nifty 50 Index',
-                data: data.nifty50.map(item => ({
-                    x: item.date,
-                    y: item.current_value
-                })),
-                borderColor: '#e53e3e',
-                backgroundColor: 'rgba(229, 62, 62, 0.1)',
-                fill: false,
-                tension: 0.3,
-                borderWidth: 3,
-                pointRadius: 2,
-                pointHoverRadius: 6
-            });
+        if (data.nifty50 && Array.isArray(data.nifty50) && data.nifty50.length > 0) {
+            // Validate Nifty 50 data structure
+            const validNiftyData = data.nifty50.filter(item => 
+                item && item.date && typeof item.current_value === 'number'
+            );
+
+            if (validNiftyData.length > 0) {
+                hasValidData = true;
+                
+                datasets.push({
+                    label: 'Nifty 50 Index',
+                    data: validNiftyData.map(item => ({
+                        x: item.date,
+                        y: item.current_value
+                    })),
+                    borderColor: '#e53e3e',
+                    backgroundColor: 'rgba(229, 62, 62, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    borderWidth: 3,
+                    pointRadius: 2,
+                    pointHoverRadius: 6
+                });
+            }
         }
 
+        // Check if we have any valid data to display
+        if (!hasValidData) {
+            this.showError('No valid data available for Portfolio vs Nifty 50 comparison');
+            return;
+        }
+
+        // Create chart with enhanced configuration
         this.chart = new Chart(ctx, {
             type: 'line',
             data: {
@@ -1105,7 +1239,7 @@ class SIPSimulator {
                         },
                         ticks: {
                             callback: function(value) {
-                                return '₹' + value.toLocaleString();
+                                return '₹' + value.toLocaleString('en-IN');
                             }
                         },
                         grid: {
@@ -1137,7 +1271,7 @@ class SIPSimulator {
                     },
                     title: {
                         display: true,
-                        text: 'Cumulative Portfolio Performance vs Nifty 50',
+                        text: 'Portfolio vs Nifty 50 Performance Comparison',
                         font: {
                             size: 16,
                             weight: 'bold'
@@ -1163,7 +1297,7 @@ class SIPSimulator {
                         borderWidth: 1,
                         callbacks: {
                             label: function(context) {
-                                return context.dataset.label + ': ₹' + context.parsed.y.toLocaleString();
+                                return context.dataset.label + ': ₹' + context.parsed.y.toLocaleString('en-IN');
                             },
                             afterLabel: function(context) {
                                 // Calculate return percentage
@@ -1192,6 +1326,9 @@ class SIPSimulator {
 
         // Add performance summary
         this.displayCumulativePerformanceSummary(data);
+        
+        // Show chart info
+        console.log('Portfolio vs Nifty 50 chart created successfully with', datasets.length, 'datasets');
     }
 
     displayCumulativePerformanceSummary(data) {
@@ -1459,6 +1596,27 @@ class SIPSimulator {
     }
 
     switchToCumulativeChart() {
+        // Validate that funds are selected
+        if (!this.selectedFunds || this.selectedFunds.length === 0) {
+            this.showError('Please select at least one fund before switching to Portfolio vs Nifty 50 comparison.');
+            // Switch back to individual chart
+            document.getElementById('individual-chart-btn').classList.add('active');
+            document.getElementById('cumulative-chart-btn').classList.remove('active');
+            return;
+        }
+
+        // Validate date inputs
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
+        
+        if (!startDate || !endDate) {
+            this.showError('Please select both start and end dates before viewing Portfolio vs Nifty 50 comparison.');
+            // Switch back to individual chart
+            document.getElementById('individual-chart-btn').classList.add('active');
+            document.getElementById('cumulative-chart-btn').classList.remove('active');
+            return;
+        }
+
         // Update button states
         document.getElementById('cumulative-chart-btn').classList.add('active');
         document.getElementById('individual-chart-btn').classList.remove('active');
@@ -1468,10 +1626,32 @@ class SIPSimulator {
 
         // Create cumulative chart
         if (this.cumulativeData) {
-            this.createCumulativePerformanceChart(this.cumulativeData);
+            // Check if cached data is still valid
+            const cachedStartDate = this.cumulativeData.metadata?.start_date;
+            const cachedEndDate = this.cumulativeData.metadata?.end_date;
+            const cachedFundCount = this.cumulativeData.metadata?.fund_count;
+            
+            if (cachedStartDate === startDate && 
+                cachedEndDate === endDate && 
+                cachedFundCount === this.selectedFunds.length) {
+                // Use cached data
+                console.log('Using cached cumulative data');
+                this.createCumulativePerformanceChart(this.cumulativeData);
+            } else {
+                // Fetch fresh data
+                console.log('Fetching fresh cumulative data due to parameter changes');
+                this.fetchAndDisplayCumulativeChart();
+            }
         } else {
             // Fetch cumulative data if not already available
+            console.log('Fetching cumulative data for the first time');
             this.fetchAndDisplayCumulativeChart();
+        }
+
+        // Hide individual fund summary
+        const cumulativeSummary = document.getElementById('cumulative-summary');
+        if (cumulativeSummary) {
+            cumulativeSummary.style.display = 'block';
         }
     }
 
@@ -1818,6 +1998,225 @@ class SIPSimulator {
             
             this.chart.update('none');
         }
+    }
+
+    showSuccessMessage(message) {
+        // Create success notification
+        const notification = document.createElement('div');
+        notification.className = 'success-notification';
+        notification.innerHTML = `
+            <i class="fas fa-check-circle"></i>
+            <span>${message}</span>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 3000);
+    }
+
+    switchAnalysisTab(analysisType) {
+        // Update active analysis tab
+        document.querySelectorAll('.analysis-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelector(`[data-analysis="${analysisType}"]`).classList.add('active');
+
+        // Update active analysis content
+        document.querySelectorAll('.analysis-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        
+        if (analysisType === 'risk') {
+            document.getElementById('risk-analysis-content').classList.add('active');
+        } else if (analysisType === 'comparison') {
+            document.getElementById('comparison-content').classList.add('active');
+            this.updateFundComparison();
+        }
+    }
+
+    // Portfolio analyzer methods
+    portfolioHoldings = [];
+
+    addHolding() {
+        const search = document.getElementById('holding-search').value.trim();
+        const quantity = parseFloat(document.getElementById('holding-quantity').value);
+        const price = parseFloat(document.getElementById('holding-price').value);
+
+        if (!search || !quantity || !price) {
+            this.showError('Please fill all fields to add a holding.');
+            return;
+        }
+
+        const holding = {
+            id: Date.now(),
+            name: search,
+            quantity: quantity,
+            avgPrice: price,
+            currentValue: quantity * price // Mock current value
+        };
+
+        this.portfolioHoldings.push(holding);
+        this.renderPortfolioHoldings();
+        
+        // Clear form
+        document.getElementById('holding-search').value = '';
+        document.getElementById('holding-quantity').value = '';
+        document.getElementById('holding-price').value = '';
+    }
+
+    renderPortfolioHoldings() {
+        const container = document.getElementById('portfolio-holdings');
+        container.innerHTML = '';
+
+        if (this.portfolioHoldings.length === 0) {
+            container.innerHTML = '<p class="placeholder-text">No holdings added yet. Add your stocks/funds to analyze your portfolio.</p>';
+            return;
+        }
+
+        this.portfolioHoldings.forEach(holding => {
+            const holdingElement = document.createElement('div');
+            holdingElement.className = 'holding-item';
+            
+            const currentValue = holding.quantity * holding.avgPrice * (1 + (Math.random() * 0.4 - 0.2)); // Mock price change
+            const pnl = currentValue - (holding.quantity * holding.avgPrice);
+            const pnlPercent = (pnl / (holding.quantity * holding.avgPrice)) * 100;
+            
+            holdingElement.innerHTML = `
+                <div class="holding-info">
+                    <h4>${holding.name}</h4>
+                    <p>Qty: ${holding.quantity} | Avg Price: ₹${holding.avgPrice.toFixed(2)}</p>
+                </div>
+                <div class="holding-metrics">
+                    <div class="holding-metric">
+                        <div class="holding-metric-label">Invested</div>
+                        <div class="holding-metric-value">₹${(holding.quantity * holding.avgPrice).toLocaleString()}</div>
+                    </div>
+                    <div class="holding-metric">
+                        <div class="holding-metric-label">Current</div>
+                        <div class="holding-metric-value">₹${currentValue.toLocaleString()}</div>
+                    </div>
+                    <div class="holding-metric">
+                        <div class="holding-metric-label">P&L</div>
+                        <div class="holding-metric-value ${pnl >= 0 ? 'positive' : 'negative'}">
+                            ${pnl >= 0 ? '+' : ''}₹${pnl.toLocaleString()} (${pnlPercent.toFixed(2)}%)
+                        </div>
+                    </div>
+                </div>
+                <div class="holding-actions">
+                    <button class="btn-icon btn-edit" onclick="sipSimulator.editHolding(${holding.id})" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon btn-delete" onclick="sipSimulator.removeHolding(${holding.id})" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            container.appendChild(holdingElement);
+        });
+    }
+
+    removeHolding(id) {
+        this.portfolioHoldings = this.portfolioHoldings.filter(h => h.id !== id);
+        this.renderPortfolioHoldings();
+    }
+
+    editHolding(id) {
+        const holding = this.portfolioHoldings.find(h => h.id === id);
+        if (holding) {
+            document.getElementById('holding-search').value = holding.name;
+            document.getElementById('holding-quantity').value = holding.quantity;
+            document.getElementById('holding-price').value = holding.avgPrice;
+            this.removeHolding(id);
+        }
+    }
+
+    async analyzePortfolio() {
+        if (this.portfolioHoldings.length === 0) {
+            this.showError('Please add holdings to analyze your portfolio.');
+            return;
+        }
+
+        this.showButtonLoading('analyze-portfolio-btn', 'Analyzing...');
+        
+        // Mock portfolio analysis
+        setTimeout(() => {
+            const totalInvested = this.portfolioHoldings.reduce((sum, h) => sum + (h.quantity * h.avgPrice), 0);
+            const totalCurrent = this.portfolioHoldings.reduce((sum, h) => sum + (h.quantity * h.avgPrice * (1 + (Math.random() * 0.4 - 0.2))), 0);
+            const totalPnL = totalCurrent - totalInvested;
+            const totalPnLPercent = (totalPnL / totalInvested) * 100;
+
+            const resultsContainer = document.getElementById('portfolio-analysis-results');
+            resultsContainer.innerHTML = `
+                <div class="portfolio-summary-grid">
+                    <div class="metric-card">
+                        <h4>Total Invested</h4>
+                        <div class="metric-value">₹${totalInvested.toLocaleString()}</div>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Current Value</h4>
+                        <div class="metric-value">₹${totalCurrent.toLocaleString()}</div>
+                    </div>
+                    <div class="metric-card">
+                        <h4>Total P&L</h4>
+                        <div class="metric-value ${totalPnL >= 0 ? 'positive' : 'negative'}">
+                            ${totalPnL >= 0 ? '+' : ''}₹${totalPnL.toLocaleString()} (${totalPnLPercent.toFixed(2)}%)
+                        </div>
+                    </div>
+                </div>
+            `;
+            resultsContainer.style.display = 'block';
+            
+            this.hideButtonLoading('analyze-portfolio-btn', '<i class="fas fa-chart-line"></i> Analyze Portfolio');
+        }, 1500);
+    }
+
+    async analyzePortfolioRisk() {
+        if (this.portfolioHoldings.length === 0) {
+            this.showError('Please add holdings to analyze portfolio risk.');
+            return;
+        }
+
+        this.showButtonLoading('portfolio-risk-btn', 'Analyzing Risk...');
+        
+        // Mock risk analysis
+        setTimeout(() => {
+            const resultsContainer = document.getElementById('portfolio-analysis-results');
+            resultsContainer.innerHTML = `
+                <div class="risk-metrics-grid">
+                    <div class="risk-metric-card">
+                        <h4>Portfolio Beta</h4>
+                        <div class="risk-metric-value">${(0.8 + Math.random() * 0.6).toFixed(2)}</div>
+                        <div class="risk-metric-label">vs Market</div>
+                    </div>
+                    <div class="risk-metric-card">
+                        <h4>Volatility</h4>
+                        <div class="risk-metric-value risk-medium">${(15 + Math.random() * 10).toFixed(1)}%</div>
+                        <div class="risk-metric-label">Annual</div>
+                    </div>
+                    <div class="risk-metric-card">
+                        <h4>Sharpe Ratio</h4>
+                        <div class="risk-metric-value risk-low">${(0.5 + Math.random() * 1).toFixed(2)}</div>
+                        <div class="risk-metric-label">Risk Adjusted</div>
+                    </div>
+                </div>
+            `;
+            resultsContainer.style.display = 'block';
+            
+            this.hideButtonLoading('portfolio-risk-btn', '<i class="fas fa-shield-alt"></i> Risk Analysis');
+        }, 1500);
+    }
+
+    compareFunds() {
+        if (this.selectedFunds.length === 0) {
+            this.showError('Please select funds from the SIP Simulator first.');
+            return;
+        }
+        this.updateFundComparison();
     }
 }
 
