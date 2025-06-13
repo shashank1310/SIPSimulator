@@ -353,6 +353,88 @@ def goal_planning():
         app.logger.error(f"Error in goal_planning: {str(e)}")
         return jsonify({'error': 'Goal planning failed'}), 500
 
+@app.route('/api/cumulative-performance', methods=['POST'])
+def cumulative_performance():
+    """Get cumulative performance data for charts"""
+    try:
+        if not rate_limit_check(request.remote_addr, 30):
+            return jsonify({'error': 'Rate limit exceeded'}), 429
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        funds = data.get('funds', [])
+        start_date = data.get('start_date', '2020-01-01')
+        end_date = data.get('end_date', '2024-01-01')
+        
+        app.logger.info(f"Cumulative performance request: {len(funds)} funds")
+        
+        # Generate mock cumulative data
+        import datetime
+        from dateutil.relativedelta import relativedelta
+        
+        start = datetime.datetime.strptime(start_date, '%Y-%m-%d')
+        end = datetime.datetime.strptime(end_date, '%Y-%m-%d')
+        
+        # Generate monthly data points
+        dates = []
+        portfolio_values = []
+        nifty_values = []
+        
+        current_date = start
+        portfolio_value = 0
+        nifty_value = 0
+        month_count = 0
+        
+        while current_date <= end:
+            month_count += 1
+            
+            # Calculate monthly SIP investment
+            monthly_sip = sum(fund.get('sip_amount', 5000) for fund in funds)
+            portfolio_value += monthly_sip
+            
+            # Apply mock returns (portfolio: 12.5% annual, Nifty: 10.8% annual)
+            portfolio_growth = 1 + (12.5 / 100 / 12)  # Monthly growth
+            nifty_growth = 1 + (10.8 / 100 / 12)      # Monthly growth
+            
+            portfolio_value *= portfolio_growth
+            nifty_value = (nifty_value + monthly_sip) * nifty_growth
+            
+            dates.append(current_date.strftime('%Y-%m-%d'))
+            portfolio_values.append(round(portfolio_value, 2))
+            nifty_values.append(round(nifty_value, 2))
+            
+            current_date += relativedelta(months=1)
+        
+        # Calculate final metrics
+        total_investment = month_count * sum(fund.get('sip_amount', 5000) for fund in funds)
+        portfolio_return = ((portfolio_value - total_investment) / total_investment) * 100
+        nifty_return = ((nifty_value - total_investment) / total_investment) * 100
+        
+        result = {
+            'success': True,
+            'data': {
+                'dates': dates,
+                'portfolio_values': portfolio_values,
+                'nifty_values': nifty_values,
+                'portfolio_summary': {
+                    'total_investment': total_investment,
+                    'final_portfolio_value': portfolio_value,
+                    'final_nifty_value': nifty_value,
+                    'portfolio_return': round(portfolio_return, 2),
+                    'nifty_return': round(nifty_return, 2),
+                    'outperformance': round(portfolio_return - nifty_return, 2)
+                }
+            }
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        app.logger.error(f"Error in cumulative_performance: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to generate cumulative performance data'}), 500
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug_mode = app.config['DEBUG']
