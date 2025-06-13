@@ -2,7 +2,8 @@
 class SIPSimulator {
     constructor() {
         this.selectedFunds = [];
-        this.apiBaseUrl = 'http://localhost:5000/api';
+        // Auto-detect API base URL based on environment
+        this.apiBaseUrl = this.getApiBaseUrl();
         this.chart = null;
         this.isSimulating = false;
         this.searchTimeout = null;
@@ -16,6 +17,15 @@ class SIPSimulator {
         this.initializeNavigation();
         this.setDefaultDates();
         this.testBackendConnectivity();
+    }
+
+    getApiBaseUrl() {
+        // If running on localhost, use localhost backend
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return 'http://localhost:5000/api';
+        }
+        // Otherwise, use the same domain (for Render deployment)
+        return `${window.location.origin}/api`;
     }
 
     initializeEventListeners() {
@@ -135,13 +145,17 @@ class SIPSimulator {
     async testBackendConnectivity() {
         try {
             console.log('Testing backend connectivity...');
-            const response = await fetch(`${this.apiBaseUrl.replace('/api', '')}/`);
-            const text = await response.text();
-            console.log('✅ Backend connectivity test passed:', text);
+            console.log('API Base URL:', this.apiBaseUrl);
+            const healthUrl = this.apiBaseUrl.replace('/api', '/health');
+            console.log('Health check URL:', healthUrl);
+            
+            const response = await fetch(healthUrl);
+            const data = await response.json();
+            console.log('✅ Backend connectivity test passed:', data);
         } catch (error) {
             console.error('❌ Backend connectivity test failed:', error);
-            console.error('Please ensure the backend server is running on http://localhost:5000');
-            this.showError('Cannot connect to backend server. Please ensure it is running on port 5000.');
+            console.error('API Base URL:', this.apiBaseUrl);
+            this.showError('Cannot connect to backend server. Please check your connection.');
         }
     }
 
