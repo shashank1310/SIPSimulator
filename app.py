@@ -409,50 +409,66 @@ def cumulative_performance():
         end = datetime.datetime.strptime(end_date, '%Y-%m-%d')
         
         # Generate monthly data points
-        dates = []
-        portfolio_values = []
-        nifty_values = []
+        portfolio_data = []
+        nifty_data = []
         
         current_date = start
         portfolio_value = 0
         nifty_value = 0
         month_count = 0
+        cumulative_investment = 0
         
         while current_date <= end:
             month_count += 1
             
             # Calculate monthly SIP investment
             monthly_sip = sum(fund.get('sip_amount', 5000) for fund in funds)
-            portfolio_value += monthly_sip
+            cumulative_investment += monthly_sip
             
             # Apply mock returns (portfolio: 12.5% annual, Nifty: 10.8% annual)
             portfolio_growth = 1 + (12.5 / 100 / 12)  # Monthly growth
             nifty_growth = 1 + (10.8 / 100 / 12)      # Monthly growth
             
-            portfolio_value *= portfolio_growth
+            portfolio_value = (portfolio_value + monthly_sip) * portfolio_growth
             nifty_value = (nifty_value + monthly_sip) * nifty_growth
             
-            dates.append(current_date.strftime('%Y-%m-%d'))
-            portfolio_values.append(round(portfolio_value, 2))
-            nifty_values.append(round(nifty_value, 2))
+            date_str = current_date.strftime('%Y-%m-%d')
+            
+            # Format data as expected by frontend
+            portfolio_data.append({
+                'date': date_str,
+                'invested': round(cumulative_investment, 2),
+                'current_value': round(portfolio_value, 2)
+            })
+            
+            nifty_data.append({
+                'date': date_str,
+                'invested': round(cumulative_investment, 2),
+                'current_value': round(nifty_value, 2)
+            })
             
             current_date += relativedelta(months=1)
         
         # Calculate final metrics
-        total_investment = month_count * sum(fund.get('sip_amount', 5000) for fund in funds)
+        total_investment = cumulative_investment
         portfolio_return = ((portfolio_value - total_investment) / total_investment) * 100
         nifty_return = ((nifty_value - total_investment) / total_investment) * 100
         
         result = {
             'success': True,
             'data': {
-                'dates': dates,
-                'portfolio_values': portfolio_values,
-                'nifty_values': nifty_values,
+                'portfolio': portfolio_data,
+                'nifty50': nifty_data,
+                'metadata': {
+                    'fund_count': len(funds),
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'total_months': month_count
+                },
                 'portfolio_summary': {
                     'total_investment': total_investment,
-                    'final_portfolio_value': portfolio_value,
-                    'final_nifty_value': nifty_value,
+                    'final_portfolio_value': round(portfolio_value, 2),
+                    'final_nifty_value': round(nifty_value, 2),
                     'portfolio_return': round(portfolio_return, 2),
                     'nifty_return': round(nifty_return, 2),
                     'outperformance': round(portfolio_return - nifty_return, 2)
