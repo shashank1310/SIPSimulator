@@ -16,7 +16,7 @@ from datetime import datetime
 # Configuration
 class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'production-secret-key')
-    DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+    DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() == 'true' and os.getenv('FLASK_ENV') != 'production'
     HOST = os.getenv('APP_HOST', '0.0.0.0')
     PORT = int(os.getenv('PORT', 5000))  # Render uses PORT env var
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
@@ -334,10 +334,18 @@ def goal_planning():
         return jsonify({'error': 'Goal planning failed'}), 500
 
 if __name__ == '__main__':
-    app.logger.info("Starting SIP Simulator")
     port = int(os.getenv('PORT', 5000))
+    debug_mode = app.config['DEBUG']
+    
+    if debug_mode:
+        app.logger.info("Starting SIP Simulator in development mode")
+    else:
+        app.logger.info("Starting SIP Simulator in production mode")
+    
+    app.logger.info(f"Server will run on port {port}")
+    
     app.run(
         host='0.0.0.0',
         port=port,
-        debug=app.config['DEBUG']
+        debug=debug_mode
     ) 

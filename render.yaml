@@ -10,8 +10,6 @@ services:
         value: production
       - key: SECRET_KEY
         generateValue: true
-      - key: PYTHONPATH
-        value: /opt/render/project/src/backend
       - key: LOG_LEVEL
         value: INFO
       - key: CORS_ORIGINS
